@@ -10,7 +10,6 @@ public class RiksbankenApiApplication {
 	public static void main(String[] args) {
 		SpringApplication.run(RiksbankenApiApplication.class, args);
 
-
 	}
 
 }
