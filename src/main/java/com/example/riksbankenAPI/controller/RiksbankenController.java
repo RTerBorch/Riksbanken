@@ -34,9 +34,9 @@ public class RiksbankenController {
     @GetMapping("/mergeData")
     public String mergeData() throws IOException {
 
-        riksbankenApiService.copyFile();
-
-        riksbankenApiService.ExcelToJson();
+       // riksbankenApiService.copyFile();
+        riksbankenApiService.mergeData();
+   //     riksbankenApiService.ExcelToJson();
 
         return "merged data - tester";
     }

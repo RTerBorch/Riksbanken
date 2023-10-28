@@ -14,6 +14,9 @@ import java.io.*;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.text.SimpleDateFormat;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 
 import java.io.File;
@@ -26,6 +29,8 @@ import java.util.Map;
 // Service annotation tells Spring Boot that this class is a service class.
 @Service
 public class RiksbankenApiService {
+    private String dataPath = "src/demoWorksheet/input/DatadumpDemo.xlsx";
+    private String currPath = "src/demoWorksheet/input/riksbankens_kurser.xlsx";
 
     // Method to fetch observations from the Riksbank API based on given series IDs and date range.
     public List<JsonNode> fetchObservations(List<String> seriesIds, String from, String to) {
@@ -63,7 +68,7 @@ public class RiksbankenApiService {
     // Method to convert JSON data to Excel format.
     public void jsonToExcel(List<JsonNode> jsonNodes, List<String> seriesIds) {
 
-        try (XSSFWorkbook workbook = new XSSFWorkbook(); FileOutputStream outputStream = new FileOutputStream("src/demoWorksheet/input/riksbankens_kurser.xlsx")) {
+        try (XSSFWorkbook workbook = new XSSFWorkbook(); FileOutputStream outputStream = new FileOutputStream(currPath)) {
             XSSFSheet sheet = workbook.createSheet("Data Details");
 
             // Create the header row with 'Date' and series IDs.
@@ -115,159 +120,94 @@ public class RiksbankenApiService {
         return newRow.getRowNum();
     }
 
-    public void mergeData2() throws IOException {
-        // Load DatadumpDemo.xlsx
-        FileInputStream fis1 = new FileInputStream(new File("src/demoWorksheet/input/DatadumpDemo.xlsx"));
-        Workbook workbook1 = new XSSFWorkbook(fis1);
-        Sheet sheet1 = workbook1.getSheetAt(0);
-
-        // Load riksbankens_kurser.xlsx
-        FileInputStream fis2 = new FileInputStream(new File("src/demoWorksheet/input/riksbankens_kurser.xlsx"));
-        Workbook workbook2 = new XSSFWorkbook(fis2);
-        Sheet sheet2 = workbook2.getSheetAt(0);
-
-        // Create copy of DatadumpDemo.xlsx as merged_data.xlsx
-        FileOutputStream fos = new FileOutputStream(new File("src/demoWorksheet/output/merged_data.xlsx"));
-        Workbook outputWorkbook = new XSSFWorkbook();
-        Sheet outputSheet = outputWorkbook.createSheet();
-
-        // Copy DatadumpDemo.xlsx to merged_data.xlsx
-        for (Row row : sheet1) {
-            Row newRow = outputSheet.createRow(row.getRowNum());
-            for (Cell cell : row) {
-                Cell newCell = newRow.createCell(cell.getColumnIndex(), cell.getCellType());
-                switch (cell.getCellType()) {
-                    case STRING:
-                        newCell.setCellValue(cell.getStringCellValue());
-                        break;
-                    case NUMERIC:
-                        newCell.setCellValue(cell.getNumericCellValue());
-                        break;
-                    // Add more cases if required
-                }
-            }
-        }
-
-        // Map dates from DatadumpDemo.xlsx to row numbers for easy lookup
-        HashMap<String, Integer> dateToRowNum = new HashMap<>();
-        for (Row row : outputSheet) {
-            Cell dateCell = row.getCell(0);
-            if (dateCell != null && dateCell.getCellType() == CellType.STRING) {
-                dateToRowNum.put(dateCell.getStringCellValue(), row.getRowNum());
-            }
-        }
-
-        // Add headers from riksbankens_kurser.xlsx
-        Row firstRowSheet2 = sheet2.getRow(0);
-        Row firstRowOutput = outputSheet.getRow(0);
-        int lastColumnIndex = firstRowOutput.getLastCellNum();
-        for (int i = 1; i < firstRowSheet2.getLastCellNum(); i++) {
-            Cell newCell = firstRowOutput.createCell(lastColumnIndex++);
-            newCell.setCellValue(firstRowSheet2.getCell(i).getStringCellValue());
-        }
-
-        // Merge data
-        for (Row row : sheet2) {
-            Cell dateCell = row.getCell(0);
-            if (dateCell != null && dateCell.getCellType() == CellType.STRING) {
-                if (dateToRowNum.containsKey(dateCell.getStringCellValue())) {
-                    int rowNum = dateToRowNum.get(dateCell.getStringCellValue());
-                    Row targetRow = outputSheet.getRow(rowNum);
-                    int colIndex = firstRowOutput.getLastCellNum() - (firstRowSheet2.getLastCellNum() - 1);
-                    for (int i = 1; i < row.getLastCellNum(); i++) {
-                        Cell newCell = targetRow.createCell(colIndex++);
-                        switch (row.getCell(i).getCellType()) {
-                            case STRING:
-                                newCell.setCellValue(row.getCell(i).getStringCellValue());
-                                break;
-                            case NUMERIC:
-                                newCell.setCellValue(row.getCell(i).getNumericCellValue());
-                                break;
-                            // Add more cases if required
-                        }
-                    }
-                }
-            }
-        }
-
-        // Save merged_data.xlsx
-        outputWorkbook.write(fos);
-
-        // Close resources
-        fis1.close();
-        fis2.close();
-        fos.close();
-        workbook1.close();
-        workbook2.close();
-        outputWorkbook.close();
-    }
-
     public void mergeData() throws IOException {
         // Paths to the input files
-        String path1 = "src/demoWorksheet/input/DatadumpDemo.xlsx";
-        String path2 = "src/demoWorksheet/input/riksbankens_kurser.xlsx";
 
-        // Load both workbooks
-        Workbook wb1 = new XSSFWorkbook(new FileInputStream(path1));
-        Workbook wb2 = new XSSFWorkbook(new FileInputStream(path2));
+        String dateString = "";
+        String tmpDateString = "";
+        String tmpCurValue = "";
+        int lastCellNum;
+        Cell newCell;
+        boolean match;
 
-        // Get the sheets from both workbooks
-        Sheet sheet1 = wb1.getSheetAt(0);
-        Sheet sheet2 = wb2.getSheetAt(0);
+        // Map Riksbankens.xlsx
+        Map<String, Map<LocalDate, Double>> currencyMap = readExcelToCurrencyMap(currPath);
 
-        // Create a map to hold the values from the second sheet
-        Map<String, Row> data = new HashMap<>();
+        try (FileInputStream fis = new FileInputStream(dataPath);
+             Workbook workbook = new XSSFWorkbook(fis)) {
 
-        // Populate the map using the date as the key
-        Iterator<Row> iterator = sheet2.iterator();
-        iterator.next(); // Skip header
-        while (iterator.hasNext()) {
-            Row currentRow = iterator.next();
-            Cell dateCell = currentRow.getCell(0);
-            if (dateCell.getCellType() == CellType.NUMERIC) {
-                if (DateUtil.isCellDateFormatted(dateCell)) {
-                    String dateKey = dateCell.getDateCellValue().toString();
-                    data.put(dateKey, currentRow);
-                }
-            }
-        }
+            Sheet sheet = workbook.getSheetAt(0);
+            SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
 
-        // Merge data
-        for (Row row : sheet1) {
-            if (row.getRowNum() == 0) { // header
-                int lastCol = row.getLastCellNum();
-                Row headerRow2 = sheet2.getRow(0);
-                for (int i = 1; i < headerRow2.getLastCellNum(); i++) {
-                    Cell newHeader = row.createCell(lastCol - 1 + i);
-                    newHeader.setCellValue(headerRow2.getCell(i).getStringCellValue());
-                }
-            } else {
-                Cell dateCell = row.getCell(0);
-                if (DateUtil.isCellDateFormatted(dateCell)) {
-                    String dateKey = dateCell.getDateCellValue().toString();
-                    if (data.containsKey(dateKey)) {
-                        Row matchingRow = data.get(dateKey);
-                        for (int i = 1; i < matchingRow.getLastCellNum(); i++) {
-                            Cell cell = matchingRow.getCell(i);
-                            Cell newCell = row.createCell(row.getLastCellNum());
-                            newCell.setCellValue(cell.getNumericCellValue());
+            // For each currency element in currencyMap.
+            for (String key : currencyMap.keySet()) {
+                // WRITE HEADERS, create new column in first empty on row 0.
+                lastCellNum = sheet.getRow(0).getLastCellNum();
+                newCell = sheet.getRow(0).createCell(lastCellNum);
+                newCell.setCellValue(key);
+
+
+                for (Row row : sheet) {
+                    tmpCurValue = "";
+                    if (row.getRowNum() == 0) {
+                        continue;
+                    }
+                    match = false;
+                    Cell dateCell = row.getCell(0);
+                    String dateStr = null;
+
+
+                    // Map<LocalDate, Double>
+                    for (LocalDate key2 : currencyMap.get(key).keySet()) {
+
+                        dateString = key2.toString();
+
+
+                        // Handle possible mismatch between numeric and string values in Excel.
+                        if (dateCell.getCellType() == CellType.NUMERIC && DateUtil.isCellDateFormatted(dateCell)) {
+                            dateStr = sdf.format(dateCell.getDateCellValue());
+                        } else if (dateCell.getCellType() == CellType.STRING) {
+                            dateStr = dateCell.getStringCellValue();
+                        }
+
+                        if (dateStr != null && dateStr.equals(dateString)) {
+                            match = true;
+                            tmpCurValue = currencyMap.get(key).get(key2).toString();
+                            // Find the last cell with content in this row.
+                            lastCellNum = row.getLastCellNum();
+                            // Create a new cell in the next empty column and write "hello" there.
+                            newCell = row.createCell(lastCellNum);
+                            newCell.setCellValue(tmpCurValue);
                         }
                     }
-                }
-            }
-        }
-// Write the result to the output file
-        FileOutputStream fileOut = new FileOutputStream("src/demoWorksheet/output/merged_data.xlsx");
-        wb1.write(fileOut);
-        fileOut.close();
+                    // Set the tmpDate at the end of the loop
+                    tmpDateString = dateString;
 
-        // Close resources
-        wb1.close();
-        wb2.close();
+                    // if there is no match, print last known currency value *
+                    if (!match) {
+                        lastCellNum = row.getLastCellNum();
+                        newCell = row.createCell(lastCellNum);
+                        LocalDate testKey = LocalDate.parse(tmpDateString);
+                        newCell.setCellValue(currencyMap.get(key).get(testKey).toString()+"*");
+                    }
+                }
+
+            }
+
+            // Save the workbook back to the file or another output stream.
+            try (FileOutputStream fos = new FileOutputStream(dataPath)) {
+                workbook.write(fos);
+            }
+
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        System.out.println("Finished.");
     }
 
+
     public void ExcelToJson() throws IOException {
-        String excelFilePath = "src/demoWorksheet/input/riksbankens_kurser.xlsx";
+        String excelFilePath = currPath;
         Workbook workbook = WorkbookFactory.create(new File(excelFilePath));
         Sheet sheet = workbook.getSheetAt(0);
         Gson gson = new Gson();
@@ -303,9 +243,62 @@ public class RiksbankenApiService {
 
         workbook.close();
     }
-   public void copyFile() throws IOException {
-        Files.copy(Paths.get("src/demoWorksheet/input/DatadumpDemo.xlsx"), Paths.get("src/demoWorksheet/output/DEMO.xlsx"));
+
+    public void copyFile(String inputPath, String outputPath) throws IOException {
+        Files.copy(Paths.get(inputPath), Paths.get(outputPath));
     }
 
+    public Map<String, Map<LocalDate, Double>> readExcelToCurrencyMap(String filePath) {
+        Map<String, Map<LocalDate, Double>> currencyMap = new HashMap<>();
+        try (FileInputStream fis = new FileInputStream(filePath);
+             Workbook workbook = new XSSFWorkbook(fis)) {
+
+            Sheet sheet = workbook.getSheetAt(0);
+            Row headerRow = sheet.getRow(0);
+
+            for (int i = 1; i < headerRow.getPhysicalNumberOfCells(); i++) {
+                String currencyCode = headerRow.getCell(i).getStringCellValue();
+                currencyMap.put(currencyCode, new HashMap<>());
+            }
+
+            for (int i = 1; i < sheet.getPhysicalNumberOfRows(); i++) {
+                Row row = sheet.getRow(i);
+                Cell dateCell = row.getCell(0);
+
+                String dateStr;
+                if (dateCell.getCellType() == CellType.STRING) {
+                    dateStr = dateCell.getStringCellValue();
+                } else if (dateCell.getCellType() == CellType.NUMERIC) {
+                    Date javaDate = dateCell.getDateCellValue();
+                    dateStr = new SimpleDateFormat("yyyy-MM-dd").format(javaDate);
+                } else {
+                    continue;
+                }
+
+                LocalDate date = LocalDate.parse(dateStr, DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+
+                for (int j = 1; j < row.getPhysicalNumberOfCells(); j++) {
+                    Cell rateCell = row.getCell(j);
+                    double rate;
+                    if (rateCell.getCellType() == CellType.STRING) {
+                        String rateStr = rateCell.getStringCellValue().replace(",", ".");
+                        rate = Double.parseDouble(rateStr);
+                    } else if (rateCell.getCellType() == CellType.NUMERIC) {
+                        rate = rateCell.getNumericCellValue();
+                    } else {
+                        continue;
+                    }
+
+                    String currencyCode = headerRow.getCell(j).getStringCellValue();
+                    currencyMap.get(currencyCode).put(date, rate);
+                }
+            }
+
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+        return currencyMap;
+    }
 
 }
