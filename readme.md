@@ -20,25 +20,25 @@ Fetches exchange rate data for specified currencies within a date range.
 - **to**: The end date in the format `yyyy-MM-dd`.
 
 #### Example
-```
-POST /getObservation?seriesIdList=AUD,BRL&from=2023-09-01&to=2023-10-01g
-```
+\`\`\`
+POST /getObservation?seriesIdList=AUD,BRL&from=2023-09-01&to=2023-10-01
+\`\`\`
 
 ### `/mergeData` (GET)
 Merges downloaded data into a predefined Excel sheet.
 
 #### Example
-```
+\`\`\`
 GET /mergeData
-```
+\`\`\`
 
 ### `/ExcelToJson` (GET)
 Converts the downloaded data saved in Excel into JSON format.
 
 #### Example
-```
+\`\`\`
 GET /ExcelToJson
-```
+\`\`\`
 
 ## Code Explanation
 
@@ -67,5 +67,3 @@ Converts the Excel sheet to JSON format and saves it as `output.json`.
 - Spring Boot
 - Jackson for JSON handling
 - Apache POI for Excel operations
-
----
