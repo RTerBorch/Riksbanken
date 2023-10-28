@@ -21,7 +21,7 @@ Fetches exchange rate data for specified currencies within a date range.
 
 #### Example
 ```
-POST /getObservation?seriesIdList=AUD,BRL&from=2023-09-01&to=2023-10-01
+POST /getObservation?seriesIdList=AUD,BRL&from=2023-09-01&to=2023-10-01g
 ```
 
 ### `/mergeData` (GET)
