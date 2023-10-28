@@ -15,29 +15,24 @@ import java.util.List;
 @RestController
 public class RiksbankenController {
 
-    //AUD BRL CAD CHF CNY CZK DKK EUR GBP HKD HUF IDR INR ISK JPY KRW MAD MXN NOK NZD PLN SAR SGD THB TRY USD ZAR
- //"SEKEURPMI","SEKCADPMI", "SEKAUDPMI");
-  // from = "2023-09-01";
- //  to = "2023-10-01";
 
     @Autowired
     RiksbankenApiService riksbankenApiService;
 
     @PostMapping("/getObservation")
-    public JsonNode getObservation(@RequestParam List<String> seriesIdList, @RequestParam String from, @RequestParam String to) {
-
-        riksbankenApiService.fetchObservations(seriesIdList,from,to);
-
-        return null;
+    public String getObservation(@RequestParam List<String> seriesIdList, @RequestParam String from, @RequestParam String to) {
+        riksbankenApiService.fetchObservations(seriesIdList, from, to);
+        return "Downloaded data from riksbankenAPI.";
     }
 
     @GetMapping("/mergeData")
     public String mergeData() throws IOException {
-
-       // riksbankenApiService.copyFile();
         riksbankenApiService.mergeData();
-   //     riksbankenApiService.ExcelToJson();
+        return "merged data.";
+    }
 
-        return "merged data - tester";
+    @GetMapping("/ExcelToJson")
+    public JsonNode ExcelToJson() throws IOException {
+        return riksbankenApiService.ExcelToJson();
     }
 }

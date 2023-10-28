@@ -2,7 +2,7 @@ package com.example.riksbankenAPI.service;
 
 // Importing necessary libraries
 
-import com.google.gson.Gson;
+
 import org.apache.poi.ss.usermodel.*;
 import org.springframework.stereotype.Service;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -12,8 +12,6 @@ import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 
 import java.io.*;
 import java.net.URL;
-import java.nio.file.Files;
-import java.nio.file.Paths;
 import java.text.SimpleDateFormat;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
@@ -26,7 +24,6 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 
-// Service annotation tells Spring Boot that this class is a service class.
 @Service
 public class RiksbankenApiService {
     private String dataPath = "src/demoWorksheet/input/DatadumpDemo.xlsx";
@@ -171,13 +168,11 @@ public class RiksbankenApiService {
                     tmpDateString = entry.getKey().toString();
                 }
             }
-
             if (!match && !tmpDateString.isEmpty()) {
                 setCellValue(row, dateValueMap.get(LocalDate.parse(tmpDateString)).toString() + "*");
             }
         }
     }
-
     private String getDateFromCell(Cell cell, SimpleDateFormat sdf) {
         if (cell.getCellType() == CellType.NUMERIC && DateUtil.isCellDateFormatted(cell)) {
             return sdf.format(cell.getDateCellValue());
@@ -194,14 +189,12 @@ public class RiksbankenApiService {
     }
 
 
-    public void ExcelToJson() throws IOException {
+    public JsonNode ExcelToJson() throws IOException {
         String excelFilePath = currPath;
         Workbook workbook = WorkbookFactory.create(new File(excelFilePath));
         Sheet sheet = workbook.getSheetAt(0);
-        Gson gson = new Gson();
 
         List<Map<String, Object>> finalJsonList = new ArrayList<>();
-
         Row headerRow = sheet.getRow(0);
 
         for (Row row : sheet) {
@@ -222,14 +215,17 @@ public class RiksbankenApiService {
             finalJsonList.add(jsonObject);
         }
 
-        String json = gson.toJson(finalJsonList);
+        ObjectMapper objectMapper = new ObjectMapper();
+        JsonNode jsonNode = objectMapper.valueToTree(finalJsonList);
 
         try (FileOutputStream fos = new FileOutputStream("src/demoWorksheet/output/output.json")) {
+            String json = objectMapper.writeValueAsString(jsonNode);
             byte[] jsonBytes = json.getBytes();
             fos.write(jsonBytes);
         }
 
         workbook.close();
+        return jsonNode;
     }
 
     public Map<String, Map<LocalDate, Double>> readExcelToCurrencyMap(String filePath) {
@@ -281,7 +277,6 @@ public class RiksbankenApiService {
         } catch (IOException e) {
             e.printStackTrace();
         }
-
         return currencyMap;
     }
 
