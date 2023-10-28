@@ -32,6 +32,7 @@ public class RiksbankenApiService {
     private String dataPath = "src/demoWorksheet/input/DatadumpDemo.xlsx";
     private String currPath = "src/demoWorksheet/input/riksbankens_kurser.xlsx";
 
+
     // Method to fetch observations from the Riksbank API based on given series IDs and date range.
     public List<JsonNode> fetchObservations(List<String> seriesIds, String from, String to) {
         List<JsonNode> jsonNodes = new ArrayList<>();
@@ -121,88 +122,75 @@ public class RiksbankenApiService {
     }
 
     public void mergeData() throws IOException {
-        // Paths to the input files
-
-        String dateString = "";
-        String tmpDateString = "";
-        String tmpCurValue = "";
-        int lastCellNum;
-        Cell newCell;
-        boolean match;
-
-        // Map Riksbankens.xlsx
+        // Initialize helper objects and variables
         Map<String, Map<LocalDate, Double>> currencyMap = readExcelToCurrencyMap(currPath);
+        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
 
         try (FileInputStream fis = new FileInputStream(dataPath);
-             Workbook workbook = new XSSFWorkbook(fis)) {
+             Workbook workbook = new XSSFWorkbook(fis);
+             FileOutputStream fos = new FileOutputStream("src/demoWorksheet/output/mergedData.xlsx")) {
 
             Sheet sheet = workbook.getSheetAt(0);
-            SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
 
-            // For each currency element in currencyMap.
-            for (String key : currencyMap.keySet()) {
-                // WRITE HEADERS, create new column in first empty on row 0.
-                lastCellNum = sheet.getRow(0).getLastCellNum();
-                newCell = sheet.getRow(0).createCell(lastCellNum);
-                newCell.setCellValue(key);
-
-
-                for (Row row : sheet) {
-                    tmpCurValue = "";
-                    if (row.getRowNum() == 0) {
-                        continue;
-                    }
-                    match = false;
-                    Cell dateCell = row.getCell(0);
-                    String dateStr = null;
-
-
-                    // Map<LocalDate, Double>
-                    for (LocalDate key2 : currencyMap.get(key).keySet()) {
-
-                        dateString = key2.toString();
-
-
-                        // Handle possible mismatch between numeric and string values in Excel.
-                        if (dateCell.getCellType() == CellType.NUMERIC && DateUtil.isCellDateFormatted(dateCell)) {
-                            dateStr = sdf.format(dateCell.getDateCellValue());
-                        } else if (dateCell.getCellType() == CellType.STRING) {
-                            dateStr = dateCell.getStringCellValue();
-                        }
-
-                        if (dateStr != null && dateStr.equals(dateString)) {
-                            match = true;
-                            tmpCurValue = currencyMap.get(key).get(key2).toString();
-                            // Find the last cell with content in this row.
-                            lastCellNum = row.getLastCellNum();
-                            // Create a new cell in the next empty column and write "hello" there.
-                            newCell = row.createCell(lastCellNum);
-                            newCell.setCellValue(tmpCurValue);
-                        }
-                    }
-                    // Set the tmpDate at the end of the loop
-                    tmpDateString = dateString;
-
-                    // if there is no match, print last known currency value *
-                    if (!match) {
-                        lastCellNum = row.getLastCellNum();
-                        newCell = row.createCell(lastCellNum);
-                        LocalDate testKey = LocalDate.parse(tmpDateString);
-                        newCell.setCellValue(currencyMap.get(key).get(testKey).toString()+"*");
-                    }
-                }
-
+            for (String currencyKey : currencyMap.keySet()) {
+                createHeader(sheet, currencyKey);
+                populateData(sheet, currencyMap.get(currencyKey), sdf);
             }
 
-            // Save the workbook back to the file or another output stream.
-            try (FileOutputStream fos = new FileOutputStream(dataPath)) {
-                workbook.write(fos);
-            }
+            workbook.write(fos);
 
         } catch (IOException e) {
             e.printStackTrace();
         }
         System.out.println("Finished.");
+    }
+
+    private void createHeader(Sheet sheet, String currencyKey) {
+        int lastCellNum = sheet.getRow(0).getLastCellNum();
+        Cell newCell = sheet.getRow(0).createCell(lastCellNum);
+        newCell.setCellValue(currencyKey);
+    }
+
+    private void populateData(Sheet sheet, Map<LocalDate, Double> dateValueMap, SimpleDateFormat sdf) {
+        String tmpDateString = "";
+        String tmpCurValue;
+
+        for (Row row : sheet) {
+            if (row.getRowNum() == 0) {
+                continue;
+            }
+
+            boolean match = false;
+            String dateStr = getDateFromCell(row.getCell(0), sdf);
+
+            for (Map.Entry<LocalDate, Double> entry : dateValueMap.entrySet()) {
+                if (dateStr != null && dateStr.equals(entry.getKey().toString())) {
+                    match = true;
+                    tmpCurValue = entry.getValue().toString();
+                    setCellValue(row, tmpCurValue);
+                    tmpDateString = entry.getKey().toString();
+                }
+            }
+
+            if (!match && !tmpDateString.isEmpty()) {
+                setCellValue(row, dateValueMap.get(LocalDate.parse(tmpDateString)).toString() + "*");
+            }
+        }
+    }
+
+    private String getDateFromCell(Cell cell, SimpleDateFormat sdf) {
+        if (cell.getCellType() == CellType.NUMERIC && DateUtil.isCellDateFormatted(cell)) {
+            return sdf.format(cell.getDateCellValue());
+        } else if (cell.getCellType() == CellType.STRING) {
+            return cell.getStringCellValue();
+        }
+        return null;
+    }
+
+    private void setCellValue(Row row, String value) {
+        int lastCellNum = row.getLastCellNum();
+        Cell newCell = row.createCell(lastCellNum);
+        newCell.setCellValue(value);
     }
 
 
@@ -242,10 +230,6 @@ public class RiksbankenApiService {
         }
 
         workbook.close();
-    }
-
-    public void copyFile(String inputPath, String outputPath) throws IOException {
-        Files.copy(Paths.get(inputPath), Paths.get(outputPath));
     }
 
     public Map<String, Map<LocalDate, Double>> readExcelToCurrencyMap(String filePath) {
